@@ -1,0 +1,73 @@
+
+services:
+  db:
+    image: postgres:16
+    env_file:
+      - .env
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    volumes:
+      - ./api:/src
+
+  telegram:
+    build:
+      context: ./telegram-service
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    depends_on:
+      - api
+
+  monitoring:
+    build:
+      context: ./monitoring-service
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    env_file:
+      - .env
+    volumes:
+      - ./monitoring-service:/src
+    depends_on:
+      - api
+
+  worker:
+    build: ./monitoring-service
+    command: celery -A worker.celery worker -P threads --pool=solo --loglevel=info
+    volumes:
+      - ./monitoring-service:/src
+    env_file:
+      - .env
+    depends_on:
+      - monitoring
+      - redis
+
+  celery-beat:
+    build: ./monitoring-service
+    command: celery -A worker beat --loglevel=info
+    volumes:
+      - ./monitoring-service:/src
+    env_file:
+      - .env
+    depends_on:
+      - monitoring
+      - redis
+
+  redis:
+    image: redis:7
+
+volumes:
+  postgres-data:
